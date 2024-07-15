@@ -1,0 +1,97 @@
+version: '1.0'
+name: puj-eda-poc
+
+
+services:
+  apache_kafka_standalone:
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:9092"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
+    image: docker.io/apache/kafka:3.7.0
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT_HOST://kafka:9092,PLAINTEXT://kafka:19092'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'CONTROLLER://:29093,PLAINTEXT_HOST://:9092,PLAINTEXT://:19092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      CLUSTER_ID: '4L6g3nShT-eMCtK--X86sw'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    networks:
+      - poc_bridge  
+
+  spring_sales_processor_producer:
+    image: localhost/puj-diplomado-kafka-producer:1.0.1
+    hostname: spring-producer
+    environment:
+        KAFKA_HOST: kafka
+    ports:
+      - "8080:8080"
+    networks:
+      - poc_bridge  
+    depends_on:
+      apache_kafka_standalone: service_healthy
+
+  spring_sales_inventory_consumer:
+    image: localhost/puj-diplomado-kafka-inventary-consumer:1.0.1
+    hostname: spring-inventory-consumer
+    environment:
+        KAFKA_HOST: kafka
+        POSTGRES_HOST: postgres
+    depends_on:
+      apache_kafka_standalone: service_healthy
+      postgres_db: service_healthy
+    networks:
+      - poc_bridge      
+
+  postgres_db:
+    image: docker.io/library/postgres:12.19-alpine3.20
+    hostname: postgres
+    shm_size: 128mb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: restaurant_registry
+      POSTGRES_PASSWORD: empanada123  
+    networks:
+      - poc_bridge  
+
+  spring_sales_invoice_consumer:
+    image: localhost/puj-diplomado-kafka-invoice-consumer:1.0.1
+    hostname: spring-invoice-consumer
+    environment:
+        KAFKA_HOST: kafka
+        PULSAR_HOST: pulsar
+    networks:
+      - poc_bridge  
+    depends_on:
+      apache_kafka_standalone: service_healthy
+      apache_pulsar_standalone: service_healthy
+
+  apache_pulsar_standalone:
+    image: docker.io/apachepulsar/pulsar:3.3.0
+    healthcheck:
+        test: bin/pulsar-admin brokers healthcheck
+        interval: 30s
+        timeout: 10s
+        retries: 5    
+    command: bin/pulsar standalone
+    hostname: pulsar
+    environment:
+      PULSAR_MEM: " -Xms512m -Xmx512m -XX:MaxDirectMemorySize=1g"    
+    networks:
+      - poc_bridge  
+      
+networks:
+  poc_bridge:
+    name: puj_poc_brige
+    driver: bridge
