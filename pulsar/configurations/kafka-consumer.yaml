@@ -1,0 +1,6 @@
+configs:
+   bootstrapServers: "kafka:9092"
+   groupId: "pulsar-io-invoice"
+   topic: "event-driven-architecture"
+   sessionTimeoutMs: "10000"
+   autoCommitEnabled: false

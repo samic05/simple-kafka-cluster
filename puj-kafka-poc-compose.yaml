@@ -3,6 +3,7 @@ name: puj-eda-poc
 
 
 services:
+
   apache_kafka_standalone:
     healthcheck:
         test: ["CMD", "curl", "-f", "http://localhost:9092"]
@@ -28,7 +29,7 @@ services:
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
     networks:
       - poc_bridge  
-
+      - poc_external_bridge
   spring_sales_processor_producer:
     image: localhost/puj-diplomado-kafka-producer:1.0.1
     hostname: spring-producer
@@ -73,25 +74,36 @@ services:
         PULSAR_HOST: pulsar
     networks:
       - poc_bridge  
+      - poc_external_bridge
     depends_on:
       apache_kafka_standalone: service_healthy
       apache_pulsar_standalone: service_healthy
 
   apache_pulsar_standalone:
     image: docker.io/apachepulsar/pulsar:3.3.0
+    volumes:
+      - ./pulsar/configurations/kafka-consumer.yaml:/pulsar/conf/kafkaSourceConfig.yaml
+      - ./pulsar/connectors/pulsar-io-kafka-3.3.0.nar:/pulsar/connectors/pulsar-io-kafka.nar
     healthcheck:
         test: bin/pulsar-admin brokers healthcheck
         interval: 30s
         timeout: 10s
         retries: 5    
-    command: bin/pulsar standalone
+    entrypoint: /bin/bash -c
+    command:
+    - (bin/pulsar-admin source localrun --archive /pulsar/connectors/pulsar-io-kafka.nar --tenant public --namespace default --name kafka --destination-topic-name external_invoices --source-config-file /pulsar/conf/kafkaSourceConfig.yaml --parallelism 1 &)  && bin/pulsar standalone
     hostname: pulsar
+    ports:
+      - "8082:8080"
     environment:
       PULSAR_MEM: " -Xms512m -Xmx512m -XX:MaxDirectMemorySize=1g"    
     networks:
-      - poc_bridge  
+      - poc_external_bridge
       
 networks:
   poc_bridge:
     name: puj_poc_brige
+    driver: bridge
+  poc_external_bridge:
+    name: puj_poc_external_brige
     driver: bridge
